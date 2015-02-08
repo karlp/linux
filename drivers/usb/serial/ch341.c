@@ -28,6 +28,10 @@
 #define DEFAULT_TIMEOUT   1000
 
 #define CH341_REQ_VERSION	0x5f
+#define CH341_REQ_READ_REG	0x95
+#define CH341_REQ_WRITE_REG	0x9A
+#define CH341_REQ_SERIAL	0xa1
+#define CH341_REQ_MODEM		0xa4
 
 /* flags for IO-Bits */
 #define CH341_BIT_RTS (1 << 6)
@@ -63,8 +67,6 @@
  * the Net/FreeBSD uchcom.c driver by Takanori Watanabe.  Domo arigato.
  */
 
-#define CH341_REQ_WRITE_REG    0x9A
-#define CH341_REQ_READ_REG     0x95
 #define CH341_REG_BREAK1       0x05
 #define CH341_REG_BREAK2       0x18
 #define CH341_NBREAK_BITS_REG1 0x01
@@ -142,16 +144,16 @@ static int ch341_set_baudrate(struct usb_device *dev,
 	a = (factor & 0xff00) | divisor;
 	b = factor & 0xff;
 
-	r = ch341_control_out(dev, 0x9a, 0x1312, a);
+	r = ch341_control_out(dev, CH341_REQ_WRITE_REG, 0x1312, a);
 	if (!r)
-		r = ch341_control_out(dev, 0x9a, 0x0f2c, b);
+		r = ch341_control_out(dev, CH341_REQ_WRITE_REG, 0x0f2c, b);
 
 	return r;
 }
 
 static int ch341_set_handshake(struct usb_device *dev, u8 control)
 {
-	return ch341_control_out(dev, 0xa4, ~control, 0);
+	return ch341_control_out(dev, CH341_REQ_MODEM, ~control, 0);
 }
 
 static int ch341_get_status(struct usb_device *dev, struct ch341_private *priv)
@@ -165,7 +167,7 @@ static int ch341_get_status(struct usb_device *dev, struct ch341_private *priv)
 	if (!buffer)
 		return -ENOMEM;
 
-	r = ch341_control_in(dev, 0x95, 0x0706, 0, buffer, size);
+	r = ch341_control_in(dev, CH341_REQ_READ_REG, 0x0706, 0, buffer, size);
 	if (r < 0)
 		goto out;
 
@@ -200,7 +202,7 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 	/* want more version codes, to work out the magic for ch341/ch340 */
 	dev_dbg(&dev->dev, "version response = %*ph\n", size, buffer);
 
-	r = ch341_control_out(dev, 0xa1, 0, 0);
+	r = ch341_control_out(dev, CH341_REQ_SERIAL, 0, 0);
 	if (r < 0)
 		goto out;
 
@@ -209,11 +211,11 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 		goto out;
 
 	/* expect two bytes 0x56 0x00 */
-	r = ch341_control_in(dev, 0x95, 0x2518, 0, buffer, size);
+	r = ch341_control_in(dev, CH341_REQ_READ_REG, 0x2518, 0, buffer, size);
 	if (r < 0)
 		goto out;
 
-	r = ch341_control_out(dev, 0x9a, 0x2518, 0x0050);
+	r = ch341_control_out(dev, CH341_REQ_WRITE_REG, 0x2518, 0x0050);
 	if (r < 0)
 		goto out;
 
@@ -222,7 +224,7 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 	if (r < 0)
 		goto out;
 
-	r = ch341_control_out(dev, 0xa1, 0x501f, 0xd90a);
+	r = ch341_control_out(dev, CH341_REQ_SERIAL, 0x501f, 0xd90a);
 	if (r < 0)
 		goto out;
 
