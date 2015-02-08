@@ -159,7 +159,7 @@ static int ch341_get_status(struct usb_device *dev, struct ch341_private *priv)
 {
 	char *buffer;
 	int r;
-	const unsigned size = 8;
+	const unsigned size = 2;
 	unsigned long flags;
 
 	buffer = kmalloc(size, GFP_KERNEL);
@@ -190,7 +190,7 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 {
 	char *buffer;
 	int r;
-	const unsigned size = 8;
+	const unsigned size = 2;
 
 	buffer = kmalloc(size, GFP_KERNEL);
 	if (!buffer)
