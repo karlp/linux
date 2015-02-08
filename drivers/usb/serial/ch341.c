@@ -170,6 +170,7 @@ static int ch341_get_status(struct usb_device *dev, struct ch341_private *priv)
 	r = ch341_control_in(dev, CH341_REQ_READ_REG, 0x0706, 0, buffer, size);
 	if (r < 0)
 		goto out;
+	dev_dbg(&dev->dev, "%s received: %*ph\n", __func__, size, buffer);
 
 	/* setup the private status if available */
 	if (r == 2) {
