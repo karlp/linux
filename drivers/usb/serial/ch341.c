@@ -27,6 +27,8 @@
 #define DEFAULT_BAUD_RATE 9600
 #define DEFAULT_TIMEOUT   1000
 
+#define CH341_REQ_VERSION	0x5f
+
 /* flags for IO-Bits */
 #define CH341_BIT_RTS (1 << 6)
 #define CH341_BIT_DTR (1 << 5)
@@ -192,10 +194,11 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 	if (!buffer)
 		return -ENOMEM;
 
-	/* expect two bytes 0x27 0x00 */
-	r = ch341_control_in(dev, 0x5f, 0, 0, buffer, size);
+	r = ch341_control_in(dev, CH341_REQ_VERSION, 0, 0, buffer, size);
 	if (r < 0)
 		goto out;
+	/* want more version codes, to work out the magic for ch341/ch340 */
+	dev_dbg(&dev->dev, "version response = %*ph\n", size, buffer);
 
 	r = ch341_control_out(dev, 0xa1, 0, 0);
 	if (r < 0)
