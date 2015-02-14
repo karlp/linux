@@ -138,6 +138,8 @@ static int ch341_set_baudrate(struct usb_device *dev,
 		return -EINVAL;
 	factor = (CH341_BAUDBASE_FACTOR / priv->baud_rate);
 	divisor = CH341_BAUDBASE_DIVMAX;
+	dev_dbg(&dev->dev, "%s: requested baudrate: %u, factor:%lu, divisor:%u\n",
+		__func__, priv->baud_rate, factor, divisor);
 
 	while ((factor > 0xfff0) && divisor) {
 		factor >>= 3;
@@ -150,6 +152,7 @@ static int ch341_set_baudrate(struct usb_device *dev,
 	factor = 0x10000 - factor;
 	a = (factor & 0xff00) | divisor;
 	b = factor & 0xff;
+	dev_dbg(&dev->dev, "%s: final a: 0x%02x b: 0x%02x\n", __func__, a, b);
 
 	r = ch341_control_out(dev, CH341_REQ_WRITE_REG, 0x1312, a);
 	if (!r)
@@ -310,6 +313,7 @@ static void ch341_dtr_rts(struct usb_serial_port *port, int on)
 
 static void ch341_close(struct usb_serial_port *port)
 {
+	dev_dbg(&port->dev, "%s entered\n", __func__);
 	usb_serial_generic_close(port);
 	usb_kill_urb(port->interrupt_in_urb);
 }
@@ -359,6 +363,8 @@ static void ch341_set_termios(struct tty_struct *tty,
 	struct ch341_private *priv = usb_get_serial_port_data(port);
 	unsigned baud_rate;
 	unsigned long flags;
+	dev_dbg(&port->dev, "%s - cflag:0x%04x, oflag:0x%04x, iflag:0x%04x\n",
+		__func__, tty->termios.c_cflag, tty->termios.c_oflag, tty->termios.c_iflag);
 
 	baud_rate = tty_get_baud_rate(tty);
 
@@ -446,6 +452,7 @@ static int ch341_tiocmset(struct tty_struct *tty,
 		priv->line_control &= ~CH341_BIT_DTR;
 	control = priv->line_control;
 	spin_unlock_irqrestore(&priv->lock, flags);
+	dev_dbg(&port->dev, "%s - control = 0x%.4x\n", __func__, control);
 
 	return ch341_set_handshake(port->serial->dev, control);
 }
@@ -540,6 +547,7 @@ static int ch341_tiocmget(struct tty_struct *tty)
 	spin_lock_irqsave(&priv->lock, flags);
 	mcr = priv->line_control;
 	status = priv->line_status;
+	dev_dbg(&port->dev, "%s - mcr: %#x, status: %#x\n", __func__, mcr, status);
 	spin_unlock_irqrestore(&priv->lock, flags);
 
 	result = ((mcr & CH341_BIT_DTR)		? TIOCM_DTR : 0)
