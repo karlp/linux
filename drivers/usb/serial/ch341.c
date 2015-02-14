@@ -239,10 +239,6 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 	if (r < 0)
 		goto out;
 
-	r = ch341_set_baudrate(dev, priv);
-	if (r < 0)
-		goto out;
-
 	r = ch341_set_handshake(dev, priv->line_control);
 	if (r < 0)
 		goto out;
@@ -333,10 +329,6 @@ static int ch341_open(struct tty_struct *tty, struct usb_serial_port *port)
 		goto out;
 
 	r = ch341_set_handshake(serial->dev, priv->line_control);
-	if (r)
-		goto out;
-
-	r = ch341_set_baudrate(serial->dev, priv);
 	if (r)
 		goto out;
 
