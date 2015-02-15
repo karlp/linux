@@ -645,6 +645,7 @@ static int ch341_reset_resume(struct usb_serial *serial)
 
 	/* reconfigure ch341 serial port after bus-reset */
 	dev_dbg(&serial->dev->dev, "%s\n", __func__);
+	// FIXME - this will definitely fail...
 	ch341_configure(serial->dev, priv);
 
 	return 0;
