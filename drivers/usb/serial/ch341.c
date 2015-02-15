@@ -144,7 +144,7 @@ static int ch341_control_in(struct usb_device *dev,
 /*
  * Read the presently configured baud rate out of the device itself
  */
-static int ch341_get_baudrate(struct usb_device *dev,
+static int ch341_get_baudrate(struct usb_serial_port *port,
 			      unsigned int *baud)
 {
 	int r;
@@ -153,6 +153,7 @@ static int ch341_get_baudrate(struct usb_device *dev,
 	unsigned long factor;
 	short divisor;
 	const unsigned size = 2;
+	struct usb_device *dev = port->serial->dev;
 
 	buffer = kmalloc(size, GFP_KERNEL);
 	if (!buffer)
@@ -160,23 +161,23 @@ static int ch341_get_baudrate(struct usb_device *dev,
 
 	r = ch341_control_in(dev, CH341_REQ_READ_REG, 0x1312, 0, buffer, size);
 	if (r < 0) {
-		dev_err(&dev->dev, "%s - USB control read error (%d)\n", __func__, r);
+		dev_err(&port->dev, "%s - USB control read error (%d)\n", __func__, r);
 		goto out;
 	}
 	a = buffer[1] << 8 | buffer[0];
 	r = ch341_control_in(dev, CH341_REQ_READ_REG, 0x0f2c, 0, buffer, size);
 	if (r < 0) {
-		dev_err(&dev->dev, "%s - USB control read error (%d)\n", __func__, r);
+		dev_err(&port->dev, "%s - USB control read error (%d)\n", __func__, r);
 		goto out;
 	}
 	b = buffer[0];
 	divisor = a & 0xff; /* Probably actually 0x03 */
 	factor = (a & 0xff00) | b;
-	dev_dbg(&dev->dev, "%s: raw factor 0x%04lx, div: 0x%02x\n", __func__, factor, divisor);
+	dev_dbg(&port->dev, "%s: raw factor 0x%04lx, div: 0x%02x\n", __func__, factor, divisor);
 	factor = 0x10000 - factor;
 	factor <<= 3 * (3 - divisor);
 	*baud = CH341_BAUDBASE_FACTOR / factor;
-	dev_dbg(&dev->dev, "%s: factor: %lu, divisor:%u -> baud: %u\n",
+	dev_dbg(&port->dev, "%s: factor: %lu, divisor:%u -> baud: %u\n",
 		__func__, factor, divisor, *baud);
 
 out:
@@ -184,7 +185,10 @@ out:
 	return r;
 }
 
-static int ch341_set_baudrate(struct usb_device *dev,
+/*
+ * ch340 and ch341 both claim 50-2Mbps
+ */
+static int ch341_set_baudrate(struct usb_serial_port *port,
 			      struct ch341_private *priv)
 {
 	short a, b;
@@ -193,12 +197,12 @@ static int ch341_set_baudrate(struct usb_device *dev,
 	short divisor;
 
 	if (!priv->baud_rate) {
-		dev_err(&dev->dev, "%s: karl, no baud rate to set?!\n", __func__);
+		dev_err(&port->dev, "%s: karl, no baud rate to set?!\n", __func__);
 		return -EINVAL;
 	}
 	factor = (CH341_BAUDBASE_FACTOR / priv->baud_rate);
 	divisor = CH341_BAUDBASE_DIVMAX;
-	dev_dbg(&dev->dev, "%s: requested baudrate: %u, factor:%lu, divisor:%u\n",
+	dev_dbg(&port->dev, "%s: requested baudrate: %u, factor:%lu, divisor:%u\n",
 		__func__, priv->baud_rate, factor, divisor);
 
 	while ((factor > 0xfff0) && divisor) {
@@ -212,11 +216,11 @@ static int ch341_set_baudrate(struct usb_device *dev,
 	factor = 0x10000 - factor;
 	a = (factor & 0xff00) | divisor;
 	b = factor & 0xff;
-	dev_dbg(&dev->dev, "%s: final a: 0x%02x b: 0x%02x\n", __func__, a, b);
+	dev_dbg(&port->dev, "%s: final a: 0x%02x b: 0x%02x\n", __func__, a, b);
 
-	r = ch341_control_out(dev, CH341_REQ_WRITE_REG, 0x1312, a);
+	r = ch341_control_out(port->serial->dev, CH341_REQ_WRITE_REG, 0x1312, a);
 	if (!r)
-		r = ch341_control_out(dev, CH341_REQ_WRITE_REG, 0x0f2c, b);
+		r = ch341_control_out(port->serial->dev, CH341_REQ_WRITE_REG, 0x0f2c, b);
 
 	return r;
 }
@@ -231,7 +235,7 @@ static void ch341_get_termios_port(struct usb_serial_port *port,
 	unsigned int baud = 0;
 	unsigned int bits;
 
-	ch341_get_baudrate(serial->dev, &baud);
+	ch341_get_baudrate(port, &baud);
 
 	dev_dbg(dev, "%s - baud rate = %d\n", __func__, baud);
 	*baudp = baud;
@@ -300,7 +304,6 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 	char *buffer;
 	int r;
 	const unsigned size = 2;
-	unsigned int baud = 0;
 
 	buffer = kmalloc(size, GFP_KERNEL);
 	if (!buffer)
@@ -488,7 +491,7 @@ static void ch341_set_termios(struct tty_struct *tty,
 		__func__, tty->termios.c_cflag, tty->termios.c_oflag, tty->termios.c_iflag);
 
 	baud_rate = tty_get_baud_rate(tty);
-	dev_dbg(&port->serial->dev->dev, "karl - tty_get_baud_rate => %u\n", baud_rate);
+	dev_dbg(&port->dev, "karl - tty_get_baud_rate => %u\n", baud_rate);
 
 	priv->baud_rate = baud_rate;
 
@@ -496,7 +499,7 @@ static void ch341_set_termios(struct tty_struct *tty,
 		spin_lock_irqsave(&priv->lock, flags);
 		priv->line_control |= (CH341_BIT_DTR | CH341_BIT_RTS);
 		spin_unlock_irqrestore(&priv->lock, flags);
-		ch341_set_baudrate(port->serial->dev, priv);
+		ch341_set_baudrate(port, priv);
 	} else {
 		spin_lock_irqsave(&priv->lock, flags);
 		priv->line_control &= ~(CH341_BIT_DTR | CH341_BIT_RTS);
