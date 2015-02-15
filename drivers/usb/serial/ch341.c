@@ -178,8 +178,10 @@ static int ch341_set_baudrate(struct usb_device *dev,
 	unsigned long factor;
 	short divisor;
 
-	if (!priv->baud_rate)
+	if (!priv->baud_rate) {
+		dev_err(&dev->dev, "%s: karl, no baud rate to set?!\n", __func__);
 		return -EINVAL;
+	}
 	factor = (CH341_BAUDBASE_FACTOR / priv->baud_rate);
 	divisor = CH341_BAUDBASE_DIVMAX;
 	dev_dbg(&dev->dev, "%s: requested baudrate: %u, factor:%lu, divisor:%u\n",
@@ -299,6 +301,7 @@ static int ch341_port_probe(struct usb_serial_port *port)
 	struct ch341_private *priv;
 	int r;
 
+	dev_dbg(&port->serial->dev->dev, "%s entered\n", __func__);
 	priv = kzalloc(sizeof(struct ch341_private), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
@@ -366,6 +369,7 @@ static int ch341_open(struct tty_struct *tty, struct usb_serial_port *port)
 	struct ch341_private *priv = usb_get_serial_port_data(port);
 	int r;
 
+	dev_dbg(&port->dev, ">>%s entry\n", __func__);
 	priv->baud_rate = DEFAULT_BAUD_RATE;
 
 	r = ch341_configure(serial->dev, priv);
@@ -386,6 +390,7 @@ static int ch341_open(struct tty_struct *tty, struct usb_serial_port *port)
 	}
 
 	r = usb_serial_generic_open(tty, port);
+	dev_dbg(&port->dev, "<<%s exit\n", __func__);
 
 out:	return r;
 }
@@ -403,6 +408,7 @@ static void ch341_set_termios(struct tty_struct *tty,
 		__func__, tty->termios.c_cflag, tty->termios.c_oflag, tty->termios.c_iflag);
 
 	baud_rate = tty_get_baud_rate(tty);
+	dev_dbg(&port->serial->dev->dev, "karl - tty_get_baud_rate => %u\n", baud_rate);
 
 	priv->baud_rate = baud_rate;
 
@@ -424,6 +430,7 @@ static void ch341_set_termios(struct tty_struct *tty,
 	 * (cflag & PARENB) : parity {NONE, EVEN, ODD}
 	 * (cflag & CSTOPB) : stop bits [1, 2]
 	 */
+	dev_dbg(&port->dev, "%s exit\n", __func__);
 }
 
 static void ch341_break_ctl(struct tty_struct *tty, int break_state)
@@ -605,6 +612,7 @@ static int ch341_reset_resume(struct usb_serial *serial)
 	priv = usb_get_serial_port_data(serial->port[0]);
 
 	/* reconfigure ch341 serial port after bus-reset */
+	dev_dbg(&serial->dev->dev, "%s\n", __func__);
 	ch341_configure(serial->dev, priv);
 
 	return 0;
