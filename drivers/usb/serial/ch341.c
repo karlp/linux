@@ -207,6 +207,44 @@ static int ch341_set_baudrate(struct usb_device *dev,
 	return r;
 }
 
+
+static void ch341_get_termios_port(struct usb_serial_port *port,
+	unsigned int *cflagp, unsigned int *baudp)
+{
+	struct device *dev = &port->dev;
+	struct usb_serial *serial = port->serial;
+	unsigned int cflag, modem_ctl[4];
+	unsigned int baud = 0;
+	unsigned int bits;
+
+	ch341_get_baudrate(serial->dev, &baud);
+
+	dev_dbg(dev, "%s - baud rate = %d\n", __func__, baud);
+	*baudp = baud;
+	/* TODO - finish this */
+}
+
+
+/*
+ * TODO - do this with what we've learnt
+ */
+static void ch341_get_termios(struct tty_struct *tty,
+	struct usb_serial_port *port)
+{
+	unsigned int baud;
+
+	if (tty) {
+		ch341_get_termios_port(tty->driver_data,
+			&tty->termios.c_cflag, &baud);
+		tty_encode_baud_rate(tty, baud, baud);
+	} else {
+		 int cflag;
+		cflag = 0;
+		ch341_get_termios_port(port, &cflag, &baud);
+	}
+}
+
+
 static int ch341_set_handshake(struct usb_device *dev, u8 control)
 {
 	return ch341_control_out(dev, CH341_REQ_MODEM, ~control, 0);
