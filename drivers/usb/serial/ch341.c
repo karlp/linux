@@ -126,6 +126,50 @@ static int ch341_control_in(struct usb_device *dev,
 	return r;
 }
 
+
+/*
+ * Read the presently configured baud rate out of the device itself
+ */
+static int ch341_get_baudrate(struct usb_device *dev,
+			      unsigned int *baud)
+{
+	int r;
+	char *buffer;
+	short a, b;
+	unsigned long factor;
+	short divisor;
+	const unsigned size = 2;
+
+	buffer = kmalloc(size, GFP_KERNEL);
+	if (!buffer)
+		return -ENOMEM;
+
+	r = ch341_control_in(dev, CH341_REQ_READ_REG, 0x1312, 0, buffer, size);
+	if (r < 0) {
+		dev_err(&dev->dev, "%s - USB control read error (%d)\n", __func__, r);
+		goto out;
+	}
+	a = buffer[1] << 8 | buffer[0];
+	r = ch341_control_in(dev, CH341_REQ_READ_REG, 0x0f2c, 0, buffer, size);
+	if (r < 0) {
+		dev_err(&dev->dev, "%s - USB control read error (%d)\n", __func__, r);
+		goto out;
+	}
+	b = buffer[0];
+	divisor = a & 0xff; /* Probably actually 0x03 */
+	factor = (a & 0xff00) | b;
+	dev_dbg(&dev->dev, "%s: raw factor 0x%04lx, div: 0x%02x\n", __func__, factor, divisor);
+	factor = 0x10000 - factor;
+	factor <<= 3 * (3 - divisor);
+	*baud = CH341_BAUDBASE_FACTOR / factor;
+	dev_dbg(&dev->dev, "%s: factor: %lu, divisor:%u -> baud: %u\n",
+		__func__, factor, divisor, *baud);
+
+out:
+	kfree(buffer);
+	return r;
+}
+
 static int ch341_set_baudrate(struct usb_device *dev,
 			      struct ch341_private *priv)
 {
