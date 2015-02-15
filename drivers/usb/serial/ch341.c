@@ -185,6 +185,31 @@ out:
 	return r;
 }
 
+static int ch341_get_lcr(struct usb_serial_port *port, u8 *lcr)
+{
+	int r;
+	char *buffer;
+	const unsigned size = 2;
+	struct usb_device *dev = port->serial->dev;
+
+	buffer = kmalloc(size, GFP_KERNEL);
+	if (!buffer)
+		return -ENOMEM;
+
+	r = ch341_control_in(dev, CH341_REQ_READ_REG, CH341_REG_LCR, 0, buffer, size);
+	if (r < 0) {
+		dev_err(&port->dev, "%s - USB control read error (%d)\n", __func__, r);
+		goto out;
+	}
+	*lcr = buffer[0];
+	dev_dbg(&port->dev, "%s: raw lcr: 0x%02x\n", __func__, *lcr);
+
+out:
+	kfree(buffer);
+	return r;
+
+}
+
 /*
  * ch340 and ch341 both claim 50-2Mbps
  */
@@ -226,12 +251,13 @@ static int ch341_set_baudrate(struct usb_serial_port *port,
 }
 
 
-static void ch341_get_termios_port(struct usb_serial_port *port,
+static int ch341_get_termios_port(struct usb_serial_port *port,
 	unsigned int *cflagp, unsigned int *baudp)
 {
 	struct device *dev = &port->dev;
 	struct usb_serial *serial = port->serial;
 	unsigned int cflag, modem_ctl[4];
+	u8 lcr;
 	unsigned int baud = 0;
 	unsigned int bits;
 
@@ -239,7 +265,49 @@ static void ch341_get_termios_port(struct usb_serial_port *port,
 
 	dev_dbg(dev, "%s - baud rate = %d\n", __func__, baud);
 	*baudp = baud;
-	/* TODO - finish this */
+
+	cflag = *cflagp;
+	ch341_get_lcr(port, &lcr);
+	cflag &= ~CSIZE;
+	switch (lcr & CH341_LCR_WLENMASK) {
+	case CH341_LCR_WLEN5:
+		dev_dbg(dev, "%s - data bits = 5\n", __func__);
+                cflag |= CS5;
+                break;
+	case CH341_LCR_WLEN6:
+		dev_dbg(dev, "%s - data bits = 6\n", __func__);
+                cflag |= CS6;
+                break;
+	case CH341_LCR_WLEN7:
+		dev_dbg(dev, "%s - data bits = 7\n", __func__);
+                cflag |= CS7;
+                break;
+	case CH341_LCR_WLEN8:
+		dev_dbg(dev, "%s - data bits = 8\n", __func__);
+                cflag |= CS8;
+                break;
+	}
+
+	cflag &= ~CSTOPB;
+	if (lcr & CH341_LCR_STOP) {
+		dev_dbg(dev, "%s - stop bits = 2\n", __func__);
+		cflag |= CSTOPB;
+	}
+
+	/* todo - switch and add defines instead? */
+	cflag &= ~(PARENB | PARODD | CMSPAR);
+	if (lcr & CH341_LCR_PARITY) {
+		cflag |= PARENB;
+	}
+	if (!(lcr & CH341_LCR_EPAR)) {
+		cflag |= PARODD;
+	}
+	if (lcr & CH341_LCR_SPAR) {
+		cflag |= CMSPAR;
+	}
+
+        *cflagp = cflag;
+	return 0;
 }
 
 
@@ -256,7 +324,7 @@ static void ch341_get_termios(struct tty_struct *tty,
 			&tty->termios.c_cflag, &baud);
 		tty_encode_baud_rate(tty, baud, baud);
 	} else {
-		 int cflag;
+		int cflag;
 		cflag = 0;
 		ch341_get_termios_port(port, &cflag, &baud);
 	}
@@ -452,27 +520,26 @@ static void ch341_calc_parity(struct usb_serial_port *port,
 		if (C_CMSPAR(tty)) {
 			*lcr |= CH341_LCR_SPAR;
 			if (C_PARODD(tty)) {
-				dev_dbg(&port->dev, "parity = mark\n");
+				dev_dbg(&port->dev, "set parity = mark\n");
 				*lcr &= ~CH341_LCR_EPAR;
 			} else {
-				dev_dbg(&port->dev, "parity = space\n");
+				dev_dbg(&port->dev, "set parity = space\n");
 				*lcr |= CH341_LCR_EPAR;
 			}
 		} else {
 			*lcr &= ~CH341_LCR_SPAR;
 			if (C_PARODD(tty)) {
-				dev_dbg(&port->dev, "parity = odd\n");
+				dev_dbg(&port->dev, "set parity = odd\n");
 				*lcr &= ~CH341_LCR_EPAR;
 			} else {
-				dev_dbg(&port->dev, "parity = even\n");
+				dev_dbg(&port->dev, "set parity = even\n");
 				*lcr |= CH341_LCR_EPAR;
 			}
 		}
 	} else {
 		*lcr &= ~(CH341_LCR_PARITY | CH341_LCR_SPAR | CH341_LCR_EPAR);
-		dev_dbg(&port->dev, "parity = none\n");
+		dev_dbg(&port->dev, "set parity = none\n");
 	}
-	dev_dbg(&port->dev, "output lcr: %x\n", *lcr);
 }
 
 /* Old_termios contains the original termios settings and
@@ -516,29 +583,28 @@ static void ch341_set_termios(struct tty_struct *tty,
 	switch (C_CSIZE(tty)) {
 	case CS5:
 		lcr |= CH341_LCR_WLEN5;
-		dev_dbg(&port->dev, "data bits = 5\n");
+		dev_dbg(&port->dev, "set data bits = 5\n");
 		break;
 	case CS6:
 		lcr |= CH341_LCR_WLEN6;
-		dev_dbg(&port->dev, "data bits = 6\n");
+		dev_dbg(&port->dev, "set data bits = 6\n");
 		break;
 	case CS7:
 		lcr |= CH341_LCR_WLEN7;
-		dev_dbg(&port->dev, "data bits = 7\n");
+		dev_dbg(&port->dev, "set data bits = 7\n");
 		break;
 	case CS8:
 	default:
 		lcr |= CH341_LCR_WLEN8;
-		dev_dbg(&port->dev, "data bits = 8\n");
+		dev_dbg(&port->dev, "set data bits = 8\n");
 		break;
 	}
 	if (C_CSTOPB(tty)) {
-		dev_dbg(&port->dev, "stop bits = 2\n");
+		dev_dbg(&port->dev, "set stop bits = 2\n");
 		lcr |= CH341_LCR_STOP;
 	}
 
-	/* TODO - what's in "25" ? 18 is lcr? */
-	ch341_control_out(port->serial->dev, CH341_REQ_WRITE_REG, 0x2518, lcr);
+	ch341_control_out(port->serial->dev, CH341_REQ_WRITE_REG, CH341_REG_LCR, lcr);
 
 	dev_dbg(&port->dev, "%s exit\n", __func__);
 }
