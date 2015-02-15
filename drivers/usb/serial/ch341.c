@@ -68,9 +68,23 @@
  */
 
 #define CH341_REG_BREAK1       0x05
-#define CH341_REG_BREAK2       0x18
 #define CH341_NBREAK_BITS_REG1 0x01
-#define CH341_NBREAK_BITS_REG2 0x40
+
+
+/* Mostly as per <linux/serial_reg.h> except for top bits */
+#define CH341_REG_LCR	0x18
+#define CH341_LCR_RX		0x80 /* enable uart rx */
+#define CH341_LCR_TX		0x40 /* enable uart tx */
+#define CH341_LCR_RXTX		(CH341_LCR_RX | CH341_LCR_TX)
+#define CH341_LCR_SPAR		0x20 /* Stick parity */
+#define CH341_LCR_EPAR		0x10 /* Even parity select */
+#define CH341_LCR_PARITY	0x08 /* Parity Enable */
+#define CH341_LCR_STOP		0x04 /* Stop bits: 0=1 bit, 1=2 bits */
+#define CH341_LCR_WLEN5		0x00 /* Wordlength: 5 bits */
+#define CH341_LCR_WLEN6		0x01 /* Wordlength: 6 bits */
+#define CH341_LCR_WLEN7		0x02 /* Wordlength: 7 bits */
+#define CH341_LCR_WLEN8		0x03 /* Wordlength: 8 bits */
+#define CH341_LCR_WLENMASK	0x03
 
 
 static const struct usb_device_id id_table[] = {
@@ -427,6 +441,37 @@ static int ch341_open(struct tty_struct *tty, struct usb_serial_port *port)
 out:	return r;
 }
 
+static void ch341_calc_parity(struct usb_serial_port *port,
+	struct tty_struct *tty, u8 *lcr)
+{
+	if (C_PARENB(tty)) {
+		*lcr |= CH341_LCR_PARITY;
+		if (C_CMSPAR(tty)) {
+			*lcr |= CH341_LCR_SPAR;
+			if (C_PARODD(tty)) {
+				dev_dbg(&port->dev, "parity = mark\n");
+				*lcr &= ~CH341_LCR_EPAR;
+			} else {
+				dev_dbg(&port->dev, "parity = space\n");
+				*lcr |= CH341_LCR_EPAR;
+			}
+		} else {
+			*lcr &= ~CH341_LCR_SPAR;
+			if (C_PARODD(tty)) {
+				dev_dbg(&port->dev, "parity = odd\n");
+				*lcr &= ~CH341_LCR_EPAR;
+			} else {
+				dev_dbg(&port->dev, "parity = even\n");
+				*lcr |= CH341_LCR_EPAR;
+			}
+		}
+	} else {
+		*lcr &= ~(CH341_LCR_PARITY | CH341_LCR_SPAR | CH341_LCR_EPAR);
+		dev_dbg(&port->dev, "parity = none\n");
+	}
+	dev_dbg(&port->dev, "output lcr: %x\n", *lcr);
+}
+
 /* Old_termios contains the original termios settings and
  * tty->termios contains the new setting to be used.
  */
@@ -436,6 +481,9 @@ static void ch341_set_termios(struct tty_struct *tty,
 	struct ch341_private *priv = usb_get_serial_port_data(port);
 	unsigned baud_rate;
 	unsigned long flags;
+	u8 lcr;
+
+	lcr = CH341_LCR_RXTX;
 	dev_dbg(&port->dev, "%s - cflag:0x%04x, oflag:0x%04x, iflag:0x%04x\n",
 		__func__, tty->termios.c_cflag, tty->termios.c_oflag, tty->termios.c_iflag);
 
@@ -457,18 +505,45 @@ static void ch341_set_termios(struct tty_struct *tty,
 
 	ch341_set_handshake(port->serial->dev, priv->line_control);
 
-	/* Unimplemented:
-	 * (cflag & CSIZE) : data bits [5, 8]
-	 * (cflag & PARENB) : parity {NONE, EVEN, ODD}
-	 * (cflag & CSTOPB) : stop bits [1, 2]
-	 */
+	ch341_calc_parity(port, tty, &lcr);
+
+	/* ch340 device datasheets doesn't mention variable data/stop bits */
+	/* todo - keep version info in "priv" ? */
+	lcr &= ~CH341_LCR_WLENMASK;
+	switch (C_CSIZE(tty)) {
+	case CS5:
+		lcr |= CH341_LCR_WLEN5;
+		dev_dbg(&port->dev, "data bits = 5\n");
+		break;
+	case CS6:
+		lcr |= CH341_LCR_WLEN6;
+		dev_dbg(&port->dev, "data bits = 6\n");
+		break;
+	case CS7:
+		lcr |= CH341_LCR_WLEN7;
+		dev_dbg(&port->dev, "data bits = 7\n");
+		break;
+	case CS8:
+	default:
+		lcr |= CH341_LCR_WLEN8;
+		dev_dbg(&port->dev, "data bits = 8\n");
+		break;
+	}
+	if (C_CSTOPB(tty)) {
+		dev_dbg(&port->dev, "stop bits = 2\n");
+		lcr |= CH341_LCR_STOP;
+	}
+
+	/* TODO - what's in "25" ? 18 is lcr? */
+	ch341_control_out(port->serial->dev, CH341_REQ_WRITE_REG, 0x2518, lcr);
+
 	dev_dbg(&port->dev, "%s exit\n", __func__);
 }
 
 static void ch341_break_ctl(struct tty_struct *tty, int break_state)
 {
 	const uint16_t ch341_break_reg =
-		CH341_REG_BREAK1 | ((uint16_t) CH341_REG_BREAK2 << 8);
+		CH341_REG_BREAK1 | ((uint16_t) CH341_REG_LCR << 8);
 	struct usb_serial_port *port = tty->driver_data;
 	int r;
 	uint16_t reg_contents;
@@ -490,11 +565,11 @@ static void ch341_break_ctl(struct tty_struct *tty, int break_state)
 	if (break_state != 0) {
 		dev_dbg(&port->dev, "%s - Enter break state requested\n", __func__);
 		break_reg[0] &= ~CH341_NBREAK_BITS_REG1;
-		break_reg[1] &= ~CH341_NBREAK_BITS_REG2;
+		break_reg[1] &= ~CH341_LCR_TX;
 	} else {
 		dev_dbg(&port->dev, "%s - Leave break state requested\n", __func__);
 		break_reg[0] |= CH341_NBREAK_BITS_REG1;
-		break_reg[1] |= CH341_NBREAK_BITS_REG2;
+		break_reg[1] |= CH341_LCR_TX;
 	}
 	dev_dbg(&port->dev, "%s - New ch341 break register contents - reg1: %x, reg2: %x\n",
 		__func__, break_reg[0], break_reg[1]);
