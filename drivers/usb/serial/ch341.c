@@ -286,6 +286,7 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 	char *buffer;
 	int r;
 	const unsigned size = 2;
+	unsigned int baud = 0;
 
 	buffer = kmalloc(size, GFP_KERNEL);
 	if (!buffer)
@@ -297,11 +298,8 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 	/* want more version codes, to work out the magic for ch341/ch340 */
 	dev_dbg(&dev->dev, "version response = %*ph\n", size, buffer);
 
+	/* Believe this resets the termios, should move to probe/attach....*/
 	r = ch341_control_out(dev, CH341_REQ_SERIAL, 0, 0);
-	if (r < 0)
-		goto out;
-
-	r = ch341_set_baudrate(dev, priv);
 	if (r < 0)
 		goto out;
 
@@ -337,7 +335,6 @@ out:	kfree(buffer);
 static int ch341_port_probe(struct usb_serial_port *port)
 {
 	struct ch341_private *priv;
-	int r;
 
 	dev_dbg(&port->serial->dev->dev, "%s entered\n", __func__);
 	priv = kzalloc(sizeof(struct ch341_private), GFP_KERNEL);
@@ -345,18 +342,10 @@ static int ch341_port_probe(struct usb_serial_port *port)
 		return -ENOMEM;
 
 	spin_lock_init(&priv->lock);
-	priv->baud_rate = DEFAULT_BAUD_RATE;
 	priv->line_control = CH341_BIT_RTS | CH341_BIT_DTR;
-
-	r = ch341_configure(port->serial->dev, priv);
-	if (r < 0)
-		goto error;
 
 	usb_set_serial_port_data(port, priv);
 	return 0;
-
-error:	kfree(priv);
-	return r;
 }
 
 static int ch341_port_remove(struct usb_serial_port *port)
@@ -408,11 +397,16 @@ static int ch341_open(struct tty_struct *tty, struct usb_serial_port *port)
 	int r;
 
 	dev_dbg(&port->dev, ">>%s entry\n", __func__);
-	priv->baud_rate = DEFAULT_BAUD_RATE;
 
+
+	// FIXME - this will reinit more than it should
 	r = ch341_configure(serial->dev, priv);
 	if (r)
 		goto out;
+
+	//... so we read out what _got_ configured afterwards...
+	/* Configure the termios structure */
+	ch341_get_termios(tty, port);
 
 	r = ch341_set_handshake(serial->dev, priv->line_control);
 	if (r)
