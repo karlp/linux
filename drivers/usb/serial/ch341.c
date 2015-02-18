@@ -254,6 +254,7 @@ static int ch341_set_baudrate(struct usb_serial_port *port,
 static int ch341_get_termios_port(struct usb_serial_port *port,
 	unsigned int *cflagp, unsigned int *baudp)
 {
+	int r;
 	struct device *dev = &port->dev;
 	struct usb_serial *serial = port->serial;
 	unsigned int cflag, modem_ctl[4];
@@ -267,7 +268,9 @@ static int ch341_get_termios_port(struct usb_serial_port *port,
 	*baudp = baud;
 
 	cflag = *cflagp;
-	ch341_get_lcr(port, &lcr);
+	if ((r = ch341_get_lcr(port, &lcr)) < 0) {
+		return r;
+	}
 	cflag &= ~CSIZE;
 	switch (lcr & CH341_LCR_WLENMASK) {
 	case CH341_LCR_WLEN5:
