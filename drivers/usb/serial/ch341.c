@@ -481,24 +481,12 @@ static void ch341_close(struct usb_serial_port *port)
 static int ch341_open(struct tty_struct *tty, struct usb_serial_port *port)
 {
 	struct usb_serial *serial = port->serial;
-	struct ch341_private *priv = usb_get_serial_port_data(port);
 	int r;
 
 	dev_dbg(&port->dev, ">>%s entry\n", __func__);
 
-
-	// FIXME - this will reinit more than it should
-	r = ch341_configure(serial->dev, priv);
-	if (r)
-		goto out;
-
-	//... so we read out what _got_ configured afterwards...
 	/* Configure the termios structure */
 	ch341_get_termios(tty, port);
-
-	r = ch341_set_handshake(serial->dev, priv->line_control);
-	if (r)
-		goto out;
 
 	dev_dbg(&port->dev, "%s - submitting interrupt urb\n", __func__);
 	r = usb_submit_urb(port->interrupt_in_urb, GFP_KERNEL);
