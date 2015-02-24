@@ -424,7 +424,7 @@ static int ch341_port_probe(struct usb_serial_port *port)
 {
 	struct ch341_private *priv;
 
-	dev_dbg(&port->serial->dev->dev, "%s entered\n", __func__);
+	dev_dbg(&port->dev, "%s entered\n", __func__);
 	priv = kzalloc(sizeof(struct ch341_private), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
