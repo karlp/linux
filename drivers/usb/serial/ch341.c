@@ -409,6 +409,7 @@ static int ch341_configure(struct usb_device *dev, struct ch341_private *priv)
 	if (r < 0)
 		goto out;
 
+	// FIXME after cleanup ch341_configure(), priv->line_control should be accessed under priv->lock
 	r = ch341_set_handshake(dev, priv->line_control);
 	if (r < 0)
 		goto out;
@@ -458,6 +459,7 @@ static void ch341_dtr_rts(struct usb_serial_port *port, int on)
 {
 	struct ch341_private *priv = usb_get_serial_port_data(port);
 	unsigned long flags;
+	u8 control;
 
 	/* drop DTR and RTS */
 	spin_lock_irqsave(&priv->lock, flags);
@@ -465,8 +467,9 @@ static void ch341_dtr_rts(struct usb_serial_port *port, int on)
 		priv->line_control |= CH341_BIT_RTS | CH341_BIT_DTR;
 	else
 		priv->line_control &= ~(CH341_BIT_RTS | CH341_BIT_DTR);
+	control = priv->line_control;
 	spin_unlock_irqrestore(&priv->lock, flags);
-	ch341_set_handshake(port->serial->dev, priv->line_control);
+	ch341_set_handshake(port->serial->dev, control);
 }
 
 static void ch341_close(struct usb_serial_port *port)
@@ -542,7 +545,7 @@ static void ch341_set_termios(struct tty_struct *tty,
 	struct ch341_private *priv = usb_get_serial_port_data(port);
 	unsigned baud_rate;
 	unsigned long flags;
-	u8 lcr;
+	u8 lcr, control;
 
 	lcr = CH341_LCR_RXTX;
 	dev_dbg(&port->dev, "%s - cflag:0x%04x, oflag:0x%04x, iflag:0x%04x\n",
@@ -556,15 +559,17 @@ static void ch341_set_termios(struct tty_struct *tty,
 	if (baud_rate) {
 		spin_lock_irqsave(&priv->lock, flags);
 		priv->line_control |= (CH341_BIT_DTR | CH341_BIT_RTS);
+		control = priv->line_control;
 		spin_unlock_irqrestore(&priv->lock, flags);
 		ch341_set_baudrate(port, priv);
 	} else {
 		spin_lock_irqsave(&priv->lock, flags);
 		priv->line_control &= ~(CH341_BIT_DTR | CH341_BIT_RTS);
+		control = priv->line_control;
 		spin_unlock_irqrestore(&priv->lock, flags);
 	}
 
-	ch341_set_handshake(port->serial->dev, priv->line_control);
+	ch341_set_handshake(port->serial->dev, control);
 
 	ch341_calc_parity(port, tty, &lcr);
 
