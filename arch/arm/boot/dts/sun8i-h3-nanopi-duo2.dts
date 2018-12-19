@@ -135,5 +135,14 @@
 	uart-has-rtscts;
 	status = "okay";
 
-	/* bluetooth goes here */
+	bluetooth {
+		compatible = "brcm,bcm43438-bt";
+		clocks = <&osc32k 1>;
+		clock-names = "lpo";
+		vbat-supply = <&reg_vcc3v3>;
+		vddio-supply = <&reg_vcc3v3>;
+		device-wakeup-gpios = <&pio 0 8 GPIO_ACTIVE_HIGH>; /* PA8 */
+		host-wakeup-gpios = <&pio 0 7 GPIO_ACTIVE_HIGH>; /* PA7 */
+		shutdown-gpios = <&pio 6 12 GPIO_ACTIVE_HIGH>; /* PG13 */
+	};
 };
