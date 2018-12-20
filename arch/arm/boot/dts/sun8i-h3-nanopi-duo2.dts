@@ -137,7 +137,7 @@
 
 	bluetooth {
 		compatible = "brcm,bcm43438-bt";
-		clocks = <&osc32k 1>;
+		clocks = <&osc32k>;
 		clock-names = "lpo";
 		vbat-supply = <&reg_vcc3v3>;
 		vddio-supply = <&reg_vcc3v3>;
