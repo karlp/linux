@@ -1,0 +1,145 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT OR X11)
+/*
+ * Copyright (C) 2021 Karl Palsson <karlp@etactica.com>
+ */
+/dts-v1/;
+#include "sun8i-h3.dtsi"
+#include "sunxi-common-regulators.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/input/input.h>
+
+/ {
+	model = "eTactica EGM400";
+	compatible = "etactica,egm400", "allwinner,sun8i-h3";
+
+	aliases {
+		serial0 = &uart0;
+		ethernet0 = &emac;
+	};
+
+       leds {
+                compatible = "gpio-leds";
+
+		// Internal led, not visible...
+                power {
+			color = <LED_COLOR_ID_RED>;
+			function = LED_FUNCTION_POWER;
+                        gpios = <&r_pio 0 10 GPIO_ACTIVE_HIGH>;
+                        default-state = "off";
+                };
+
+		// Internal led, not visible...
+                status_core {
+			color = <LED_COLOR_ID_GREEN>;
+                        gpios = <&pio 0 10 GPIO_ACTIVE_HIGH>;
+                };
+
+
+		status_app {
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&pio 0 6 GPIO_ACTIVE_HIGH>;
+		};
+        };
+
+};
+
+&ehci0 {
+	status = "okay";
+};
+&ehci1 {
+	status = "okay";
+};
+&ehci2 {
+	status = "okay";
+};
+&ehci3 {
+	status = "okay";
+};
+
+&emac {
+	phy-handle = <&int_mii_phy>;
+	phy-mode = "mii";
+	allwinner,leds-active-low;
+	status = "okay";
+};
+
+&mmc0 {
+        bus-width = <4>;
+        cd-gpios = <&pio 5 6 GPIO_ACTIVE_LOW>;
+        status = "okay";
+        vmmc-supply = <&reg_vcc3v3>;
+};
+
+&ohci0 {
+	status = "okay";
+};
+
+&ohci1 {
+	status = "okay";
+};
+
+&ohci2 {
+	status = "okay";
+};
+
+&ohci3 {
+	status = "okay";
+};
+
+&pio {
+	uart2_rs485_pins: uart2-rs485-pins {
+		pins = "PA0", "PA1", "PA2";
+		function ="uart2";
+	};
+
+	// PA11 == modem pwrkey
+	// PA12 == modem reset
+	// PA17 == modem pwr
+
+	// PE12 == rs485 bus power enable
+
+	// PA18 = DIN1
+	// PA19 = DIN0
+	// PA20 = DOUT0
+	// PA21 = DOUT1
+
+	// SPI is on SPi1, PA13..PA16
+	// PA3 == spi IRQ
+	// PL11 is meter zx
+};
+
+&spi1 {
+	status = "okay";
+
+	atm90e3x@0 {
+		reg = <0>;
+		compatible = "linux,spidev";
+		spi-max-frequency = <2000000>; // Nominally 2.28MHz per datasheet
+	};
+};
+
+&uart0 {
+        pinctrl-names = "default";
+        pinctrl-0 = <&uart0_pa_pins>;
+        status = "okay";
+};
+
+&uart2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_rs485_pins>;
+	// or, we use uart2_pa_pins plus "rts-gpios" with a single one for rts?
+	status = "okay";
+};
+
+&usb_otg {
+	status = "okay";
+	dr_mode = "peripheral";
+};
+
+&usbphy {
+	usb0_id_det-gpios = <&pio 6 12 GPIO_ACTIVE_HIGH>; /* PG12 */
+	status = "okay";
+};
+
