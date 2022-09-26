@@ -1,0 +1,179 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/dts-v1/;
+#include "sun8i-h3.dtsi"
+#include "sunxi-common-regulators.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "eTactica EGM400";
+	compatible = "etactica,egm400", "allwinner,sun8i-h3";
+
+	aliases {
+		ethernet0 = &emac;
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		cloud {
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&pio 0 6 GPIO_ACTIVE_HIGH>;
+		};
+
+		/* Internal, not visible */
+		power {
+			color = <LED_COLOR_ID_RED>;
+			function = LED_FUNCTION_POWER;
+			gpios = <&r_pio 0 10 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+		};
+
+		/* Internal, not visible */
+		status_core {
+			color = <LED_COLOR_ID_GREEN>;
+			gpios = <&pio 0 10 GPIO_ACTIVE_HIGH>;
+		};
+			
+	};
+};
+
+/* All four usb ports are in use */
+&ehci0 {
+	status = "okay";
+};
+
+&ehci1 {
+	status = "okay";
+};
+
+&ehci2 {
+	status = "okay";
+};
+
+&ehci3 {
+	status = "okay";
+};
+
+&emac {
+	phy-handle = <&int_mii_phy>;
+	phy-mode = "mii";
+	allwinner,leds-active-low;
+	status = "okay";
+};
+
+&mmc0 {
+	vmmc-supply = <&reg_vcc3v3>;
+	bus-width = <4>;
+	cd-gpios = <&pio 5 6 GPIO_ACTIVE_LOW>; /* PF6 */
+	status = "okay";
+};
+
+&mmc2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&mmc2_8bit_pins>;
+	vmmc-supply = <&reg_vcc3v3>;
+	vqmmc-supply = <&reg_vcc3v3>;
+	bus-width = <8>;
+	non-removable;
+	status = "okay";
+};
+
+&ohci0 {
+	status = "okay";
+};
+
+&ohci1 {
+	status = "okay";
+};
+
+&ohci2 {
+	status = "okay";
+};
+
+&ohci3 {
+	status = "okay";
+};
+
+&pio {
+	uart2_rs485_pins: uart2-rs495-pins {
+		pins = "PA0", "PA1", "PA2";
+		function = "uart2";
+	};
+
+	/*
+	 * PA11 == modem power key
+	 * PA12 == modem reset
+	 * PA17 == modem power enable
+	 *
+	 * PE12 == rs485 bus power enable
+	 *
+	 * PA18 == Digital in1
+	 * PA19 == Digital in0
+	 * PA20 == Digital out0
+	 * PA21 == Digital out1
+	 *
+	 * PA3 == SPI IRQ
+	 * PL11 == meter zx
+	 */
+};
+
+&reg_usb0_vbus {
+	gpio = <&r_pio 0 2 GPIO_ACTIVE_HIGH>; /* PL2 */
+	status = "okay";
+};
+
+&spi1 {
+	status = "okay";
+
+	atm90e3x@0 {
+		reg = <0>;
+		compatible = "linux,spidev";
+		/* Nominally 2.28MHz */
+		spi-max-frequency = <2000000>;
+	};
+};
+
+/* internal console port */
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_pa_pins>;
+	status = "okay";
+};
+
+/* debug uart to modem */
+&uart1 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart1_pins>;
+	status = "okay";
+};
+
+/* rs485 port */
+&uart2 {
+	pinctrl-names = "default";
+	/* actually only using the RTS pin, but this will do */
+	//pinctrl-0 = <&uart2_pins>, <&uart2_rts_cts_pins>;
+	//uart-has-rtscts;
+	// Or, uart2_pa_pins plus "rts-gpios" with a single rts?
+	pinctrl-0 = <&uart2_rs485_pins>;
+	status = "okay";
+};
+
+&usb_otg {
+	status = "okay";
+	dr_mode = "peripheral";
+};
+
+&usbphy {
+	usb0_id_det-gpios = <&pio 6 12 GPIO_ACTIVE_HIGH>; /* PG12 */
+	usb0_vbus-supply = <&reg_usb0_vbus>;
+        /* VBUS on USB host ports are always on */
+	status = "okay";
+};
+
